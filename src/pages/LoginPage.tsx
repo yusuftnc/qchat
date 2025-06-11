@@ -6,7 +6,6 @@ export const LoginPage = () => {
     <Container maxWidth="sm" sx={{
         margin: '0 auto',        // Container'ı yatay ortala
         px: 2,                   // Yan padding (mobil için)
-        border: '1px solid red', // Container sınırları
         minHeight: '100vh',      // Tam yükseklik
       }}>
       <Box
