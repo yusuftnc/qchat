@@ -1,29 +1,12 @@
 import { Button } from '@mui/material';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '../utils/authConfig';
+import { useAuth } from '../hooks/useAuth';
 
-interface LoginButtonProps {
-  onLoginSuccess?: () => void;
-}
-
-export const LoginButton = ({ onLoginSuccess }: LoginButtonProps) => {
-  const { instance } = useMsal();
+export const LoginButton = () => {
+  const { login } = useAuth();
 
   const handleLogin = async () => {
     try {
-      const response = await instance.loginPopup(loginRequest);
-      console.log('Login başarılı:', response);
-      
-      // API için token'ı ayarla
-      if (response.accessToken) {
-        // Burada API servisine token ekleyeceğiz
-        console.log('Token alındı:', response.accessToken);
-      }
-      
-      // Başarılı giriş callback'i
-      if (onLoginSuccess) {
-        onLoginSuccess();
-      }
+      await login();
     } catch (error) {
       console.error('Login hatası:', error);
     }

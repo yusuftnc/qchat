@@ -3,7 +3,7 @@ import type { Configuration } from '@azure/msal-browser';
 // Microsoft Entra ID konfigürasyonu
 export const msalConfig: Configuration = {
   auth: {
-    clientId: import.meta.env.VITE_CLIENT_ID, // Buraya Azure'dan alacağın Client ID
+    clientId: import.meta.env.VITE_MICROSOFT_CLIENT_ID, // Buraya Azure'dan alacağın Client ID
     authority: "https://login.microsoftonline.com/common", // Multi-tenant için
     redirectUri: "http://localhost:5173", // Vite dev server URL'i
   },
