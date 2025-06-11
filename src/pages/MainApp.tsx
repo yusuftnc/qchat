@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Box, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, 
   Typography, Grid, Button, TextField, Paper, FormControl, Select, 
@@ -6,11 +6,10 @@ import {
 } from '@mui/material';
 import { 
   Logout, Add, Send, SmartToy, Psychology, Code, 
-  Science, MenuBook, Person, QuestionAnswer, Chat as ChatIcon
+  Science, MenuBook, QuestionAnswer, Chat as ChatIcon
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { sendChatMessage, sendQnAQuestion } from '../services/api';
-import type { ChatMessage as APIChatMessage } from '../types/api';
+import { sendChatMessage, sendQnAQuestion, getAvailableModels } from '../services/api';
 
 // Chat message tipi
 interface ChatMessage {
@@ -48,24 +47,39 @@ export const MainApp = () => {
   
   // Loading states
   const [isLoading, setIsLoading] = useState(false);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  
+  // Chat container ref for auto-scroll
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  
+  // QnA container ref for auto-scroll
+  const qnaContainerRef = useRef<HTMLDivElement>(null);
+  
+  // StrictMode duplicate prevention
+  const initialConversationCreated = useRef(false);
+  const modelsLoadStarted = useRef(false);
   
   // Chat state
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gpt-4');
+  const [selectedModel, setSelectedModel] = useState('llama3.2:1b'); // Backend default model
 
   // QnA state
   const [qnaItems, setQnaItems] = useState<QnAItem[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState('');
 
-  // Models listesi
-  const models = [
-    { id: 'gpt-4', name: 'GPT-4', icon: <SmartToy />, color: 'primary' },
-    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', icon: <Psychology />, color: 'secondary' },
-    { id: 'claude-3', name: 'Claude-3', icon: <MenuBook />, color: 'success' },
-    { id: 'gemini-pro', name: 'Gemini Pro', icon: <Science />, color: 'warning' },
-  ];
+  // Dynamic models state
+  const [availableModels, setAvailableModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([]);
+
+  // Model icon mapping helper
+  const getModelIcon = (modelId: string) => {
+    if (modelId.includes('1b')) return <SmartToy />;
+    if (modelId.includes('3b')) return <Psychology />;
+    if (modelId.includes('8b')) return <MenuBook />;
+    if (modelId.includes('70b')) return <Science />;
+    return <Code />; // Default icon
+  };
 
   // Avatar menü kontrolü
   const handleAvatarClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -94,6 +108,75 @@ export const MainApp = () => {
     setActiveConversationId(newConversation.id);
   };
 
+  // İlk açılışta otomatik conversation başlat
+  useEffect(() => {
+    if (activeTab === 0 && conversations.length === 0 && !initialConversationCreated.current) {
+      initialConversationCreated.current = true;
+      createNewConversation();
+    }
+  }, []); // Sadece component mount'ta çalışır
+
+  // Load available models from backend - StrictMode safe
+  useEffect(() => {
+    if (!modelsLoadStarted.current) {
+      modelsLoadStarted.current = true;
+      
+      const loadModels = async () => {
+        try {
+          setModelsLoading(true);
+          const response = await getAvailableModels();
+          
+          // Backend response: { "status": true, "data": { "models": [...] } }
+          if (response.status && response.data && response.data.models) {
+            const formattedModels = response.data.models.map((model: any) => ({
+              id: model.name || model.model,
+              name: model.name || model.model,
+              icon: getModelIcon(model.name || model.model)
+            }));
+            
+            setAvailableModels(formattedModels);
+            
+            // İlk modeli default olarak seç (eğer şu anki seçili model listede yoksa)
+            if (formattedModels.length > 0 && !formattedModels.some((m: any) => m.id === selectedModel)) {
+              setSelectedModel(formattedModels[0].id);
+            }
+          } else {
+            throw new Error('Invalid response format');
+          }
+        } catch (error) {
+          console.error('Models yüklenemedi:', error);
+          // Fallback models
+          setAvailableModels([
+            { id: 'llama3.2:1b', name: 'Llama 3.2 1B', icon: <SmartToy /> },
+            { id: 'llama3.2:3b', name: 'Llama 3.2 3B', icon: <Psychology /> },
+            { id: 'llama3.1:8b', name: 'Llama 3.1 8B', icon: <MenuBook /> },
+            { id: 'llama3.1:70b', name: 'Llama 3.1 70B', icon: <Science /> }
+          ]);
+        } finally {
+          setModelsLoading(false);
+        }
+      };
+
+      loadModels();
+    }
+  }, []); // Sadece component mount'ta çalışır
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (chatContainerRef.current && activeTab === 0 && activeConversationId) {
+      const container = chatContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [conversations, activeConversationId, activeTab]); // Messages değiştiğinde scroll
+
+  // Auto-scroll to bottom when QnA items change
+  useEffect(() => {
+    if (qnaContainerRef.current && activeTab === 1) {
+      const container = qnaContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [qnaItems, activeTab]); // QnA items değiştiğinde scroll
+
   // Chat mesaj gönder - GERÇEK API ENTEGRASYONU
   const sendMessage = async () => {
     if (!currentMessage.trim() || !activeConversationId || isLoading) return;
@@ -120,19 +203,16 @@ export const MainApp = () => {
     try {
       // Conversation history'yi API formatına çevir
       const activeConv = conversations.find(conv => conv.id === activeConversationId);
-      const chatHistory: APIChatMessage[] = activeConv?.messages.map(msg => ({
-        id: msg.id,
+      const chatHistory = activeConv?.messages.map(msg => ({
         role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp.toISOString()
+        content: msg.content
       })) || [];
 
+      // Yeni mesajı history'ye ekle
+      const allMessages = [...chatHistory, { role: 'user' as const, content: currentMsgToSend }];
+
       // API'ye gerçek istek gönder
-      const response = await sendChatMessage({
-        message: currentMsgToSend,
-        modelId: selectedModel,
-        history: chatHistory
-      });
+      const response = await sendChatMessage(allMessages, selectedModel);
 
       // AI yanıtını ekle
       const aiMessage: ChatMessage = {
@@ -181,10 +261,7 @@ export const MainApp = () => {
 
     try {
       // API'ye gerçek istek gönder
-      const response = await sendQnAQuestion({
-        question: questionToSend,
-        modelId: selectedModel
-      });
+      const response = await sendQnAQuestion(questionToSend, selectedModel);
 
       // QnA item'ı ekle
       const newQnA: QnAItem = {
@@ -195,7 +272,7 @@ export const MainApp = () => {
         timestamp: new Date(response.timestamp)
       };
 
-      setQnaItems(prev => [newQnA, ...prev]);
+      setQnaItems(prev => [...prev, newQnA]);
 
     } catch (error) {
       console.error('QnA API Error:', error);
@@ -209,7 +286,7 @@ export const MainApp = () => {
         timestamp: new Date()
       };
 
-      setQnaItems(prev => [errorQnA, ...prev]);
+      setQnaItems(prev => [...prev, errorQnA]);
     } finally {
       setIsLoading(false);
     }
@@ -402,15 +479,23 @@ export const MainApp = () => {
                   value={selectedModel}
                   label="AI Model"
                   onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={modelsLoading}
                 >
-                  {models.map((model) => (
-                    <MenuItem key={model.id} value={model.id}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {model.icon}
-                        {model.name}
-                      </Box>
+                  {modelsLoading ? (
+                    <MenuItem disabled>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      Modeller yükleniyor...
                     </MenuItem>
-                  ))}
+                  ) : (
+                    availableModels.map((model) => (
+                      <MenuItem key={model.id} value={model.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {model.icon}
+                          {model.name}
+                        </Box>
+                      </MenuItem>
+                    ))
+                  )}
                 </Select>
               </FormControl>
               
@@ -425,31 +510,33 @@ export const MainApp = () => {
             </Box>
 
             {/* Content Area */}
-            <Box sx={{ 
-              flexGrow: 1,
-              overflow: 'auto',
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              minHeight: 0,  // Flex child için kritik!
-              maxHeight: 'calc(100vh - 240px)', // Daha hassas calculation
-              // Custom Scrollbar Styling
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: '#f1f1f1',
-                borderRadius: '10px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: '#1976d2',  // Primary blue
-                borderRadius: '10px',
-                '&:hover': {
-                  background: '#1565c0',  // Darker blue on hover
+            <Box 
+              ref={activeTab === 0 ? chatContainerRef : qnaContainerRef}
+              sx={{ 
+                flexGrow: 1,
+                overflow: 'auto',
+                p: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                minHeight: 0,  // Flex child için kritik!
+                maxHeight: 'calc(100vh - 240px)', // Daha hassas calculation
+                // Custom Scrollbar Styling
+                '&::-webkit-scrollbar': {
+                  width: '8px',
                 },
-              },
-            }}>
+                '&::-webkit-scrollbar-track': {
+                  background: '#f1f1f1',
+                  borderRadius: '10px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: '#1976d2',  // Primary blue
+                  borderRadius: '10px',
+                  '&:hover': {
+                    background: '#1565c0',  // Darker blue on hover
+                  },
+                },
+              }}>
               {activeTab === 0 ? (
                 // Chat Messages
                 !activeConversation ? (
@@ -675,13 +762,13 @@ export const MainApp = () => {
                   ❓ Toplam Soru: {qnaItems.length}
                 </Typography>
                 <Typography variant="body2">
-                  🤖 Aktif Model: {models.find(m => m.id === selectedModel)?.name}
+                  🤖 Aktif Model: {availableModels.find(m => m.id === selectedModel)?.name}
                 </Typography>
                 <Typography variant="body2" color={isLoading ? 'warning.main' : 'text.primary'}>
                   {isLoading ? '⚡ API Çalışıyor...' : '🟢 API Hazır'}
                 </Typography>
-                <Typography variant="body2">
-                  ⭐ QnChat v1.0
+                <Typography variant="body2" color="text.secondary">
+                  ⚡ QChat v1.0
                 </Typography>
               </Box>
             </Box>
@@ -691,33 +778,14 @@ export const MainApp = () => {
 
       {/* Footer */}
       <Box sx={{ 
+        p: 1, 
         borderTop: 1, 
         borderColor: 'divider',
         backgroundColor: 'background.paper',
-        py: 1,
-        px: 2,
-        flexShrink: 0
+        textAlign: 'center'
       }}>
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-          Telif Hakkı © 2025{' '}
-          <Typography
-            component="a"
-            variant="body2"
-            href="https://www.linkedin.com/in/yusuftnc/"
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{
-              color: 'primary.main',
-              textDecoration: 'none',
-              fontWeight: 'medium',
-              '&:hover': {
-                textDecoration: 'underline'
-              }
-            }}
-          >
-            Yusuf TUNÇ
-          </Typography>
-          {'. Tüm hakları saklıdır.'}
+        <Typography variant="caption" color="text.secondary">
+          Telif Hakkı © 2025 <a href="https://www.linkedin.com/in/yusuftnc/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>Yusuf TUNÇ</a>. Tüm hakları saklıdır.
         </Typography>
       </Box>
     </Box>
