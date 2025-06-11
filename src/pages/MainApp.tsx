@@ -331,8 +331,25 @@ export const MainApp = () => {
       }}>
         
         {/* Sol Sidebar - Chat Geçmişi / QnA Geçmişi */}
-        <Grid size={3} sx={{ borderRight: 1, borderColor: 'divider', backgroundColor: 'grey.50' }}>
+        <Grid size={2.5} sx={{ borderRight: 1, borderColor: 'divider', backgroundColor: 'grey.50' }}>
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Logo Header */}
+            <Box sx={{ 
+              p: 2, 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              backgroundColor: 'primary.main',
+              color: 'white'
+            }}>
+              <img src="/qchat-logo.svg" alt="QChat" width="32" height="32" style={{ filter: 'brightness(0) invert(1)' }} />
+              <Typography variant="h6" fontWeight="bold">
+                QChat
+              </Typography>
+            </Box>
             
             {/* New Chat/QnA Button */}
             <Box sx={{ p: 2 }}>
@@ -434,7 +451,7 @@ export const MainApp = () => {
         </Grid>
 
         {/* Orta Alan - Chat/QnA Interface */}
-        <Grid size={6}>
+        <Grid size={7}>
           <Box sx={{ 
             height: '100%',
             display: 'flex', 
@@ -702,7 +719,7 @@ export const MainApp = () => {
         </Grid>
 
         {/* Sağ Panel - User Profile */}
-        <Grid size={3} sx={{ borderLeft: 1, borderColor: 'divider', backgroundColor: 'grey.50' }}>
+        <Grid size={2.5} sx={{ borderLeft: 1, borderColor: 'divider', backgroundColor: 'grey.50' }}>
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             
             {/* User Header */}
