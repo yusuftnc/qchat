@@ -68,6 +68,7 @@ export const MainApp = () => {
   // QnA state
   const [qnaItems, setQnaItems] = useState<QnAItem[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState('');
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   // Dynamic models state
   const [availableModels, setAvailableModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([]);
@@ -258,6 +259,9 @@ export const MainApp = () => {
     setIsLoading(true);
     const questionToSend = currentQuestion;
     setCurrentQuestion('');
+    
+    // Soruyu hemen görüntüle (pending olarak)
+    setPendingQuestion(questionToSend);
 
     try {
       // API'ye gerçek istek gönder
@@ -273,6 +277,9 @@ export const MainApp = () => {
       };
 
       setQnaItems(prev => [...prev, newQnA]);
+      
+      // Pending soruyu temizle
+      setPendingQuestion(null);
 
     } catch (error) {
       console.error('QnA API Error:', error);
@@ -287,6 +294,9 @@ export const MainApp = () => {
       };
 
       setQnaItems(prev => [...prev, errorQnA]);
+      
+      // Pending soruyu temizle
+      setPendingQuestion(null);
     } finally {
       setIsLoading(false);
     }
@@ -630,48 +640,95 @@ export const MainApp = () => {
                     </Typography>
                   </Box>
                 ) : (
-                  qnaItems.map((item) => (
-                    <Box key={item.id} sx={{ mb: 3 }}>
-                      {/* Question */}
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-                        <Paper
-                          elevation={1}
-                          sx={{
-                            p: 2,
-                            maxWidth: '70%',
-                            backgroundColor: 'primary.main',
-                            color: 'white',
-                          }}
-                        >
-                          <Typography variant="body1">
-                            {item.question}
-                          </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
-                            {item.timestamp.toLocaleTimeString()}
-                          </Typography>
-                        </Paper>
+                  <>
+                    {qnaItems.map((item) => (
+                      <Box key={item.id} sx={{ mb: 3 }}>
+                        {/* Question */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                          <Paper
+                            elevation={1}
+                            sx={{
+                              p: 2,
+                              maxWidth: '70%',
+                              backgroundColor: 'primary.main',
+                              color: 'white',
+                            }}
+                          >
+                            <Typography variant="body1">
+                              {item.question}
+                            </Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
+                              {item.timestamp.toLocaleTimeString()}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                        {/* Answer */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                          <Paper
+                            elevation={1}
+                            sx={{
+                              p: 2,
+                              maxWidth: '70%',
+                              backgroundColor: 'grey.100',
+                              color: 'text.primary',
+                            }}
+                          >
+                            <Typography variant="body1">
+                              {item.answer}
+                            </Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
+                              {item.model}
+                            </Typography>
+                          </Paper>
+                        </Box>
                       </Box>
-                      {/* Answer */}
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                        <Paper
-                          elevation={1}
-                          sx={{
-                            p: 2,
-                            maxWidth: '70%',
-                            backgroundColor: 'grey.100',
-                            color: 'text.primary',
-                          }}
-                        >
-                          <Typography variant="body1">
-                            {item.answer}
-                          </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
-                            {item.model}
-                          </Typography>
-                        </Paper>
+                    ))}
+                    
+                    {/* Pending Question - API cevabı beklerken göster */}
+                    {pendingQuestion && (
+                      <Box sx={{ mb: 3 }}>
+                        {/* Pending Question */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                          <Paper
+                            elevation={1}
+                            sx={{
+                              p: 2,
+                              maxWidth: '70%',
+                              backgroundColor: 'primary.main',
+                              color: 'white',
+                            }}
+                          >
+                            <Typography variant="body1">
+                              {pendingQuestion}
+                            </Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
+                              {new Date().toLocaleTimeString()}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                        {/* Loading Answer */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                          <Paper
+                            elevation={1}
+                            sx={{
+                              p: 2,
+                              maxWidth: '70%',
+                              backgroundColor: 'grey.100',
+                              color: 'text.primary',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 2
+                            }}
+                          >
+                            <CircularProgress size={20} />
+                            <Typography variant="body1" color="text.secondary">
+                              Cevap hazırlanıyor...
+                            </Typography>
+                          </Paper>
+                        </Box>
                       </Box>
-                    </Box>
-                  ))
+                    )}
+                  </>
                 )
               )}
             </Box>
