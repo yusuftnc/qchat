@@ -23,7 +23,7 @@ export const LoginButton = () => {
         py: 1.5,
       }}
     >
-      Microsoft ile Giriş Yap
+      Giriş Yap
     </Button>
   );
 }; 

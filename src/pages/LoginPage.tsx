@@ -25,13 +25,13 @@ export const LoginPage = () => {
           }}
         >
           <Typography variant="h3" component="h1" gutterBottom>
-            QnChat
+            QChat
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
             AI Destekli Soru & Cevap Platformu
           </Typography>
           <Typography variant="body1" sx={{ mb: 4 }}>
-            Microsoft hesabınızla giriş yapın ve AI modellerine sorular sorun
+            Hesabınızla giriş yapın ve AI modellerine sorular sorun
           </Typography>
           <LoginButton />
         </Paper>
