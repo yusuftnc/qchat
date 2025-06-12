@@ -10,6 +10,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
 import { sendChatMessage, sendQnAQuestion, getAvailableModels } from '../services/api';
+import reactLogo from '../assets/qchat.svg';
 
 // Chat message tipi
 interface ChatMessage {
@@ -355,7 +356,7 @@ export const MainApp = () => {
               backgroundColor: 'primary.main',
               color: 'white'
             }}>
-              <img src="/qchat-logo.svg" alt="QChat" width="32" height="32" style={{ filter: 'brightness(0) invert(1)' }} />
+              <img src={reactLogo} alt="QChat" width="32" height="32" style={{ filter: 'brightness(0) invert(1)' }} />
               <Typography variant="h6" fontWeight="bold">
                 QChat
               </Typography>
