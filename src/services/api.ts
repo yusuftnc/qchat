@@ -161,4 +161,15 @@ export const removeAuthToken = () => {
 export const getAvailableModels = async () => {
   const response = await apiClient.get('/ollama/v1/models');
   return response.data;
+};
+
+// API health check
+export const checkApiHealth = async () => {
+  try {
+    const response = await apiClient.get('/ollama/v1/health');
+    return response.data.status === true;
+  } catch (error) {
+    console.error('API health check failed:', error);
+    return false;
+  }
 }; 

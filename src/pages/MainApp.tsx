@@ -9,7 +9,7 @@ import {
   Science, MenuBook, QuestionAnswer, Chat as ChatIcon
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { sendChatMessage, sendQnAQuestion, getAvailableModels } from '../services/api';
+import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth } from '../services/api';
 
 // Chat message tipi
 interface ChatMessage {
@@ -48,6 +48,7 @@ export const MainApp = () => {
   // Loading states
   const [isLoading, setIsLoading] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(true);
+  const [isApiHealthy, setIsApiHealthy] = useState(false);
   
   // Chat container ref for auto-scroll
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -326,6 +327,22 @@ export const MainApp = () => {
   };
 
   const activeConversation = conversations.find(conv => conv.id === activeConversationId);
+
+  // API health check
+  useEffect(() => {
+    const checkHealth = async () => {
+      const isHealthy = await checkApiHealth();
+      setIsApiHealthy(isHealthy);
+    };
+
+    // İlk kontrol
+    checkHealth();
+
+    // Her 30 saniyede bir kontrol et
+    const interval = setInterval(checkHealth, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Box sx={{ 
@@ -838,8 +855,8 @@ export const MainApp = () => {
                 <Typography variant="body2">
                   🤖 Aktif Model: {availableModels.find(m => m.id === selectedModel)?.name}
                 </Typography>
-                <Typography variant="body2" color={isLoading ? 'warning.main' : 'text.primary'}>
-                  {isLoading ? '⚡ API Çalışıyor...' : '🟢 API Hazır'}
+                <Typography variant="body2" color={isLoading ? 'warning.main' : (isApiHealthy ? 'success.main' : 'error.main')}>
+                  {isLoading ? '⚡ API Çalışıyor...' : (isApiHealthy ? '🟢 API Hazır' : '🔴 API Bağlantısı Yok')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   ⚡ QChat v1.0
