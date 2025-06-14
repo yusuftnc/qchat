@@ -66,28 +66,17 @@ export const getModels = async () => {
     console.error('Model listesi alınamadı:', error);
     // Fallback model listesi
     return [
-      { id: 'llama3.2:1b', name: 'Llama 3.2 1B' },
-      { id: 'llama3.2:3b', name: 'Llama 3.2 3B' },
+    //  { id: 'llama3.2:1b', name: 'Llama 3.2 1B' },
     ];
   }
 };
 
 // QnA sorusu gönder - GERÇEK FORMAT
-export const sendQnAQuestion = async (prompt: string, model: string = 'llama3.2:1b') => {
+export const sendQnAQuestion = async (prompt: string, model: string) => {
   try {
-    console.log('🟡 QnA Request Data:', { 
-      prompt, 
-      model,
-      payload: {
-        model: model,
-        stream: false,
-        prompt: prompt
-      }
-    });
-
     const response = await apiClient.post('/ollama/v1/qna', {
       model: model,
-      stream: false,
+      stream: true,
       prompt: prompt
     });
 
@@ -123,11 +112,11 @@ export const sendQnAQuestion = async (prompt: string, model: string = 'llama3.2:
 };
 
 // Chat mesajı gönder - GERÇEK FORMAT
-export const sendChatMessage = async (messages: any[], model: string = 'llama3.2:1b') => {
+export const sendChatMessage = async (messages: any[], model: string) => {
   try {
     const response = await apiClient.post('/ollama/v1/chat', {
       model: model,
-      stream: false,
+      stream: true,
       messages: messages  // MainApp'ten gelen messages'ı direkt kullan
     });
 
@@ -172,4 +161,108 @@ export const checkApiHealth = async () => {
     console.error('API health check failed:', error);
     return false;
   }
-}; 
+};
+
+// Stream uyumlu chat mesajı gönderme
+export async function sendChatMessageStream(
+  messages: any[],
+  model: string,
+  onChunk: (data: any) => void
+) {
+  const response = await fetch(`${API_BASE_URL}/ollama/v1/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-KEY': API_KEY,
+    },
+    body: JSON.stringify({
+      model,
+      stream: true,
+      messages,
+    }),
+  });
+
+  if (!response.body) throw new Error('No response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let lines = buffer.split('\n');
+    buffer = lines.pop()!;
+
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          const json = JSON.parse(line);
+          onChunk(json);
+        } catch (e) {
+          // parse hatası olursa atla
+        }
+      }
+    }
+  }
+  if (buffer.trim()) {
+    try {
+      const json = JSON.parse(buffer);
+      onChunk(json);
+    } catch (e) {}
+  }
+}
+
+// Stream uyumlu QnA fonksiyonu
+export async function sendQnAQuestionStream(
+  prompt: string,
+  model: string,
+  onChunk: (data: any) => void
+) {
+  const response = await fetch(`${API_BASE_URL}/ollama/v1/qna`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-KEY': API_KEY,
+    },
+    body: JSON.stringify({
+      model,
+      stream: true,
+      prompt,
+    }),
+  });
+
+  if (!response.body) throw new Error('No response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let lines = buffer.split('\n');
+    buffer = lines.pop()!;
+
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          const json = JSON.parse(line);
+          onChunk(json);
+        } catch (e) {
+          // parse hatası olursa atla
+        }
+      }
+    }
+  }
+  if (buffer.trim()) {
+    try {
+      const json = JSON.parse(buffer);
+      onChunk(json);
+    } catch (e) {}
+  }
+} 

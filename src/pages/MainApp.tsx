@@ -9,7 +9,7 @@ import {
   Science, MenuBook, QuestionAnswer, Chat as ChatIcon
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth } from '../services/api';
+import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth, sendChatMessageStream, sendQnAQuestionStream } from '../services/api';
 
 // Chat message tipi
 interface ChatMessage {
@@ -64,7 +64,7 @@ export const MainApp = () => {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [selectedModel, setSelectedModel] = useState('llama3.2:1b'); // Backend default model
+  const [selectedModel, setSelectedModel] = useState(''); // Backend default model
 
   // QnA state
   const [qnaItems, setQnaItems] = useState<QnAItem[]>([]);
@@ -148,12 +148,12 @@ export const MainApp = () => {
         } catch (error) {
           console.error('Models yüklenemedi:', error);
           // Fallback models
-          setAvailableModels([
+          /*setAvailableModels([
             { id: 'llama3.2:1b', name: 'Llama 3.2 1B', icon: <SmartToy /> },
             { id: 'llama3.2:3b', name: 'Llama 3.2 3B', icon: <Psychology /> },
             { id: 'llama3.1:8b', name: 'Llama 3.1 8B', icon: <MenuBook /> },
             { id: 'llama3.1:70b', name: 'Llama 3.1 70B', icon: <Science /> }
-          ]);
+          ]);*/
         } finally {
           setModelsLoading(false);
         }
@@ -192,9 +192,8 @@ export const MainApp = () => {
       timestamp: new Date()
     };
 
-    // User mesajını ekle
-    setConversations(prev => prev.map(conv => 
-      conv.id === activeConversationId 
+    setConversations(prev => prev.map(conv =>
+      conv.id === activeConversationId
         ? { ...conv, messages: [...conv.messages, userMessage] }
         : conv
     ));
@@ -202,50 +201,50 @@ export const MainApp = () => {
     const currentMsgToSend = currentMessage;
     setCurrentMessage('');
 
+    // Boş bir assistant mesajı ekle (cevap için)
+    const aiMessageId = (Date.now() + 1).toString();
+    setConversations(prev => prev.map(conv =>
+      conv.id === activeConversationId
+        ? { ...conv, messages: [...conv.messages, {
+            id: aiMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            model: selectedModel
+          }] }
+        : conv
+    ));
+
     try {
-      // Conversation history'yi API formatına çevir
-      const activeConv = conversations.find(conv => conv.id === activeConversationId);
-      const chatHistory = activeConv?.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })) || [];
-
-      // Yeni mesajı history'ye ekle
-      const allMessages = [...chatHistory, { role: 'user' as const, content: currentMsgToSend }];
-
-      // API'ye gerçek istek gönder
-      const response = await sendChatMessage(allMessages, selectedModel);
-
-      // AI yanıtını ekle
-      const aiMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date(response.timestamp),
-        model: response.model
-      };
-
-      setConversations(prev => prev.map(conv => 
-        conv.id === activeConversationId 
-          ? { ...conv, messages: [...conv.messages, aiMessage] }
-          : conv
-      ));
-
+      await sendChatMessageStream(
+        [...(conversations.find(c => c.id === activeConversationId)?.messages || []), { role: 'user', content: currentMsgToSend }],
+        selectedModel,
+        (chunk) => {
+          setConversations(prev => prev.map(conv =>
+            conv.id === activeConversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.map(msg =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: (msg.content || '') + (chunk.message?.content || chunk.response || '') }
+                      : msg
+                  )
+                }
+              : conv
+          ));
+        }
+      );
     } catch (error) {
-      console.error('Chat API Error:', error);
-      
-      // Error mesajı göster
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `❌ API Hatası: Sunucuya bağlanamadı. (${error instanceof Error ? error.message : 'Bilinmeyen hata'})`,
-        timestamp: new Date(),
-        model: 'error'
-      };
-
-      setConversations(prev => prev.map(conv => 
-        conv.id === activeConversationId 
-          ? { ...conv, messages: [...conv.messages, errorMessage] }
+      setConversations(prev => prev.map(conv =>
+        conv.id === activeConversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: `❌ API Hatası: Sunucuya bağlanamadı. (${error instanceof Error ? error.message : 'Bilinmeyen hata'})` }
+                  : msg
+              )
+            }
           : conv
       ));
     } finally {
@@ -260,44 +259,39 @@ export const MainApp = () => {
     setIsLoading(true);
     const questionToSend = currentQuestion;
     setCurrentQuestion('');
-    
-    // Soruyu hemen görüntüle (pending olarak)
-    setPendingQuestion(questionToSend);
+
+    // QnA item'ı ekle ve hemen pendingQuestion'ı temizle
+    const qnaId = Date.now().toString();
+    setQnaItems(prev => [
+      ...prev,
+      {
+        id: qnaId,
+        question: questionToSend,
+        answer: '',
+        model: selectedModel,
+        timestamp: new Date()
+      }
+    ]);
+    setPendingQuestion(null);
 
     try {
-      // API'ye gerçek istek gönder
-      const response = await sendQnAQuestion(questionToSend, selectedModel);
-
-      // QnA item'ı ekle
-      const newQnA: QnAItem = {
-        id: Date.now().toString(),
-        question: questionToSend,
-        answer: response.answer,
-        model: response.model,
-        timestamp: new Date(response.timestamp)
-      };
-
-      setQnaItems(prev => [...prev, newQnA]);
-      
-      // Pending soruyu temizle
-      setPendingQuestion(null);
-
+      await sendQnAQuestionStream(
+        questionToSend,
+        selectedModel,
+        (chunk) => {
+          setQnaItems(prev => prev.map(item =>
+            item.id === qnaId
+              ? { ...item, answer: (item.answer || '') + (chunk.response || chunk.message?.content || '') }
+              : item
+          ));
+        }
+      );
     } catch (error) {
-      console.error('QnA API Error:', error);
-      
-      // Error item ekle
-      const errorQnA: QnAItem = {
-        id: Date.now().toString(),
-        question: questionToSend,
-        answer: `❌ API Hatası: Sunucuya bağlanamadı. (${error instanceof Error ? error.message : 'Bilinmeyen hata'})`,
-        model: 'error',
-        timestamp: new Date()
-      };
-
-      setQnaItems(prev => [...prev, errorQnA]);
-      
-      // Pending soruyu temizle
-      setPendingQuestion(null);
+      setQnaItems(prev => prev.map(item =>
+        item.id === qnaId
+          ? { ...item, answer: `❌ API Hatası: Sunucuya bağlanamadı. (${error instanceof Error ? error.message : 'Bilinmeyen hata'})` }
+          : item
+      ));
     } finally {
       setIsLoading(false);
     }
@@ -704,25 +698,6 @@ export const MainApp = () => {
                     {/* Pending Question - API cevabı beklerken göster */}
                     {pendingQuestion && (
                       <Box sx={{ mb: 3 }}>
-                        {/* Pending Question */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-                          <Paper
-                            elevation={1}
-                            sx={{
-                              p: 2,
-                              maxWidth: '70%',
-                              backgroundColor: 'primary.main',
-                              color: 'white',
-                            }}
-                          >
-                            <Typography variant="body1">
-                              {pendingQuestion}
-                            </Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>
-                              {new Date().toLocaleTimeString()}
-                            </Typography>
-                          </Paper>
-                        </Box>
                         {/* Loading Answer */}
                         <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
                           <Paper
