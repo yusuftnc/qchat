@@ -265,4 +265,64 @@ export async function sendQnAQuestionStream(
       onChunk(json);
     } catch (e) {}
   }
+}
+
+// OpenAI API entegrasyonu
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || 'your-api-key-here';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+// Stream uyumlu OpenAI mesajı gönderme
+export async function sendOpenAIMessageStream(
+  messages: any[],
+  model: string,
+  onChunk: (data: any) => void
+) {
+  const response = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      stream: true,
+      messages,
+    }),
+  });
+
+  if (!response.body) throw new Error('No response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let lines = buffer.split('\n');
+    buffer = lines.pop()!;
+
+    for (const line of lines) {
+      if (line.trim()) {
+        // OpenAI stream format: "data: {json}" veya "data: [DONE]"
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6); // "data: " kısmını çıkar
+          if (data === '[DONE]') {
+            return; // Stream tamamlandı
+          }
+          try {
+            const json = JSON.parse(data);
+            // OpenAI response formatı: choices[0].delta.content
+            if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
+              onChunk({ content: json.choices[0].delta.content });
+            }
+          } catch (e) {
+            // parse hatası olursa atla
+          }
+        }
+      }
+    }
+  }
 } 

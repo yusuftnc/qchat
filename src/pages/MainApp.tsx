@@ -6,10 +6,10 @@ import {
 } from '@mui/material';
 import { 
   Logout, Add, Send, SmartToy, Psychology, Code, 
-  Science, MenuBook, QuestionAnswer, Chat as ChatIcon
+  Science, MenuBook, QuestionAnswer, Chat as ChatIcon, Book, Star
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth, sendChatMessageStream, sendQnAQuestionStream } from '../services/api';
+import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth, sendChatMessageStream, sendQnAQuestionStream, sendOpenAIMessageStream } from '../services/api';
 
 // Chat message tipi
 interface ChatMessage {
@@ -66,6 +66,11 @@ export const MainApp = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [selectedModel, setSelectedModel] = useState(''); // Backend default model
 
+  // Online Chat state (Tab 2)
+  const [onlineConversations, setOnlineConversations] = useState<ChatConversation[]>([]);
+  const [activeOnlineConversationId, setActiveOnlineConversationId] = useState<string | null>(null);
+  const [currentOnlineMessage, setCurrentOnlineMessage] = useState('');
+
   // QnA state
   const [qnaItems, setQnaItems] = useState<QnAItem[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState('');
@@ -73,6 +78,13 @@ export const MainApp = () => {
 
   // Dynamic models state
   const [availableModels, setAvailableModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([]);
+
+  // OpenAI models state (Tab 2)
+  const [selectedOpenAIModel, setSelectedOpenAIModel] = useState('gpt-4.1-nano');
+  const [openAIModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([
+    { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano (Eko)', icon: <SmartToy /> },
+    { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini (Hızlı)', icon: <Psychology /> }
+  ]);
 
   // Model icon mapping helper
   const getModelIcon = (modelId: string) => {
@@ -110,6 +122,19 @@ export const MainApp = () => {
     setActiveConversationId(newConversation.id);
   };
 
+  // Yeni online conversation başlat
+  const createNewOnlineConversation = () => {
+    const newConversation: ChatConversation = {
+      id: Date.now().toString(),
+      title: 'Yeni Çevrimiçi Sohbet',
+      messages: [],
+      model: selectedOpenAIModel, // Seçili OpenAI model
+      createdAt: new Date()
+    };
+    setOnlineConversations(prev => [newConversation, ...prev]);
+    setActiveOnlineConversationId(newConversation.id);
+  };
+
   // İlk açılışta otomatik conversation başlat
   useEffect(() => {
     if (activeTab === 0 && conversations.length === 0 && !initialConversationCreated.current) {
@@ -117,6 +142,13 @@ export const MainApp = () => {
       createNewConversation();
     }
   }, []); // Sadece component mount'ta çalışır
+
+  // İlk açılışta otomatik online conversation başlat
+  useEffect(() => {
+    if (activeTab === 1 && onlineConversations.length === 0) {
+      createNewOnlineConversation();
+    }
+  }, [activeTab]); // activeTab değiştiğinde çalışır
 
   // Load available models from backend - StrictMode safe
   useEffect(() => {
@@ -252,6 +284,89 @@ export const MainApp = () => {
     }
   };
 
+  // Online Chat mesaj gönder - OpenAI API ENTEGRASYONU
+  const sendOnlineMessage = async () => {
+    if (!currentOnlineMessage.trim() || !activeOnlineConversationId || isLoading) return;
+
+    setIsLoading(true);
+
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: currentOnlineMessage,
+      timestamp: new Date()
+    };
+
+    setOnlineConversations(prev => prev.map(conv =>
+      conv.id === activeOnlineConversationId
+        ? { ...conv, messages: [...conv.messages, userMessage] }
+        : conv
+    ));
+
+    const currentMsgToSend = currentOnlineMessage;
+    setCurrentOnlineMessage('');
+
+    // Boş bir assistant mesajı ekle (cevap için)
+    const aiMessageId = (Date.now() + 1).toString();
+    setOnlineConversations(prev => prev.map(conv =>
+      conv.id === activeOnlineConversationId
+        ? { ...conv, messages: [...conv.messages, {
+            id: aiMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            model: selectedOpenAIModel
+          }] }
+        : conv
+    ));
+
+    try {
+      // OpenAI API entegrasyonu
+      const activeOnlineConv = onlineConversations.find(conv => conv.id === activeOnlineConversationId);
+      const chatHistory = activeOnlineConv?.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })) || [];
+
+      // Yeni mesajı history'ye ekle
+      const allMessages = [...chatHistory, { role: 'user' as const, content: currentMsgToSend }];
+
+      await sendOpenAIMessageStream(
+        allMessages,
+        selectedOpenAIModel,
+        (chunk) => {
+          setOnlineConversations(prev => prev.map(conv =>
+            conv.id === activeOnlineConversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.map(msg =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: (msg.content || '') + (chunk.content || '') }
+                      : msg
+                  )
+                }
+              : conv
+          ));
+        }
+      );
+    } catch (error) {
+      setOnlineConversations(prev => prev.map(conv =>
+        conv.id === activeOnlineConversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: `❌ OpenAI API Hatası: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}` }
+                  : msg
+              )
+            }
+          : conv
+      ));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // QnA soru gönder - GERÇEK API ENTEGRASYONU
   const sendQuestion = async () => {
     if (!currentQuestion.trim() || isLoading) return;
@@ -303,7 +418,9 @@ export const MainApp = () => {
       event.preventDefault();
       if (activeTab === 0) {
         sendMessage();
-      } else {
+      } else if (activeTab === 1) {
+        sendOnlineMessage();
+      } else if (activeTab === 2) {
         sendQuestion();
       }
     }
@@ -321,6 +438,7 @@ export const MainApp = () => {
   };
 
   const activeConversation = conversations.find(conv => conv.id === activeConversationId);
+  const activeOnlineConversation = onlineConversations.find(conv => conv.id === activeOnlineConversationId);
 
   // API health check
   useEffect(() => {
@@ -384,6 +502,16 @@ export const MainApp = () => {
                 >
                   Yeni Sohbet
                 </Button>
+              ) : activeTab === 1 ? (
+                <Button 
+                  variant="outlined" 
+                  fullWidth 
+                  startIcon={<Add />}
+                  onClick={createNewOnlineConversation}
+                  sx={{ justifyContent: 'flex-start' }}
+                >
+                  Yeni Çevrimiçi Sohbet
+                </Button>
               ) : (
                 <Button 
                   variant="outlined" 
@@ -392,7 +520,7 @@ export const MainApp = () => {
                   sx={{ justifyContent: 'flex-start' }}
                   disabled
                 >
-                  QnA Geçmişi
+                  Geçmiş
                 </Button>
               )}
             </Box>
@@ -423,7 +551,7 @@ export const MainApp = () => {
               },
             }}>
               {activeTab === 0 ? (
-                // Chat History
+                // Local Chat History
                 conversations.map((conv) => (
                   <Paper
                     key={conv.id}
@@ -445,8 +573,31 @@ export const MainApp = () => {
                     </Typography>
                   </Paper>
                 ))
+              ) : activeTab === 1 ? (
+                // Online Chat History
+                onlineConversations.map((conv) => (
+                  <Paper
+                    key={conv.id}
+                    elevation={activeOnlineConversationId === conv.id ? 2 : 0}
+                    sx={{
+                      p: 2,
+                      mb: 1,
+                      cursor: 'pointer',
+                      backgroundColor: activeOnlineConversationId === conv.id ? 'primary.light' : 'transparent',
+                      '&:hover': { backgroundColor: 'grey.100' }
+                    }}
+                    onClick={() => setActiveOnlineConversationId(conv.id)}
+                  >
+                    <Typography variant="body2" noWrap>
+                      {conv.title}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {conv.messages.length} mesaj
+                    </Typography>
+                  </Paper>
+                ))
               ) : (
-                // QnA History
+                // QnA History (Tab 2) or Document Library (Tab 3)
                 qnaItems.map((item) => (
                   <Paper
                     key={item.id}
@@ -489,13 +640,25 @@ export const MainApp = () => {
               >
                 <Tab 
                   icon={<ChatIcon />} 
-                  label="Chat" 
+                  label="Yerel Sohbet" 
+                  iconPosition="start"
+                  sx={{ minHeight: 64 }}
+                />
+                <Tab 
+                  icon={<ChatIcon />} 
+                  label="Çevrimiçi Sohbet" 
                   iconPosition="start"
                   sx={{ minHeight: 64 }}
                 />
                 <Tab 
                   icon={<QuestionAnswer />} 
-                  label="QnA" 
+                  label="Soru Cevap" 
+                  iconPosition="start"
+                  sx={{ minHeight: 64 }}
+                />
+                <Tab 
+                  icon={<Book />} 
+                  label="Döküman Kitaplığı" 
                   iconPosition="start"
                   sx={{ minHeight: 64 }}
                 />
@@ -511,36 +674,77 @@ export const MainApp = () => {
               alignItems: 'center',
               gap: 2
             }}>
-              <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel>AI Model</InputLabel>
-                <Select
-                  value={selectedModel}
-                  label="AI Model"
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={modelsLoading}
-                >
-                  {modelsLoading ? (
-                    <MenuItem disabled>
-                      <CircularProgress size={16} sx={{ mr: 1 }} />
-                      Modeller yükleniyor...
-                    </MenuItem>
-                  ) : (
-                    availableModels.map((model) => (
-                      <MenuItem key={model.id} value={model.id}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {model.icon}
-                          {model.name}
-                        </Box>
+              {activeTab === 0 ? (
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>AI Model</InputLabel>
+                  <Select
+                    value={selectedModel}
+                    label="AI Model"
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    disabled={modelsLoading}
+                  >
+                    {modelsLoading ? (
+                      <MenuItem disabled>
+                        <CircularProgress size={16} sx={{ mr: 1 }} />
+                        Modeller yükleniyor...
                       </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
+                    ) : (
+                      availableModels.map((model) => (
+                        <MenuItem key={model.id} value={model.id}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {model.icon}
+                            {model.name}
+                          </Box>
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              ) : activeTab === 1 ? (
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>OpenAI Model</InputLabel>
+                  <Select
+                    value={selectedOpenAIModel}
+                    label="OpenAI Model"
+                    onChange={(e) => setSelectedOpenAIModel(e.target.value)}
+                    disabled={modelsLoading}
+                  >
+                    {modelsLoading ? (
+                      <MenuItem disabled>
+                        <CircularProgress size={16} sx={{ mr: 1 }} />
+                        Modeller yükleniyor...
+                      </MenuItem>
+                    ) : (
+                      openAIModels.map((model) => (
+                        <MenuItem key={model.id} value={model.id}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {model.icon}
+                            {model.name}
+                          </Box>
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              ) : activeTab === 2 ? (
+                <Box sx={{ minWidth: 200, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    🤖 ChatGPT 4.1 (gpt-4.1)
+                  </Typography>
+                </Box>
+              ) : null}
               
               <Chip 
-                label={activeTab === 0 ? 
-                  (activeConversation ? `${activeConversation.messages.length} mesaj` : 'Chat Modu') :
-                  `${qnaItems.length} soru`
+                label={
+                  activeTab === 0 ? 
+                    (activeConversation ? `${activeConversation.messages.length} mesaj` : 'Yerel Chat Modu') :
+                  activeTab === 1 ?
+                    (activeOnlineConversation ? 
+                      `${activeOnlineConversation.messages.length} mesaj` : 
+                      'Çevrimiçi Chat Modu') :
+                  activeTab === 2 ?
+                    `${qnaItems.length} soru` :
+                    'Döküman Kitaplığı'
                 }
                 size="small"
                 color="primary"
@@ -576,7 +780,7 @@ export const MainApp = () => {
                 },
               }}>
               {activeTab === 0 ? (
-                // Chat Messages
+                // Local Chat Messages
                 !activeConversation ? (
                   <Box sx={{ 
                     display: 'flex', 
@@ -588,7 +792,7 @@ export const MainApp = () => {
                   }}>
                     <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
                     <Typography variant="h5" color="text.secondary" gutterBottom>
-                      Chat Moduna Hoş Geldin!
+                      Yerel Chat Moduna Hoş Geldin!
                     </Typography>
                     <Typography color="text.secondary">
                       Yeni bir sohbet başlatmak için "Yeni Sohbet" butonuna tıklayın
@@ -631,7 +835,63 @@ export const MainApp = () => {
                     </Box>
                   ))
                 )
-              ) : (
+              ) : activeTab === 1 ? (
+                // Online Chat Messages
+                !activeOnlineConversation ? (
+                  <Box sx={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    height: '100%',
+                    textAlign: 'center'
+                  }}>
+                    <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
+                    <Typography variant="h5" color="text.secondary" gutterBottom>
+                      Çevrimiçi Chat Moduna Hoş Geldin!
+                    </Typography>
+                    <Typography color="text.secondary">
+                      ChatGPT ile sohbet etmek için "Yeni Çevrimiçi Sohbet" butonuna tıklayın
+                    </Typography>
+                  </Box>
+                ) : (
+                  activeOnlineConversation.messages.map((message) => (
+                    <Box
+                      key={message.id}
+                      sx={{
+                        display: 'flex',
+                        justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                        mb: 1
+                      }}
+                    >
+                      <Paper
+                        elevation={1}
+                        sx={{
+                          p: 2,
+                          maxWidth: '70%',
+                          backgroundColor: message.role === 'user' ? 'primary.main' : 'success.light',
+                          color: message.role === 'user' ? 'white' : 'text.primary',
+                        }}
+                      >
+                        <Typography variant="body1">
+                          {message.content}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            opacity: 0.7,
+                            display: 'block',
+                            mt: 1
+                          }}
+                        >
+                          {message.timestamp.toLocaleTimeString()}
+                          {message.model && ` • ${message.model}`}
+                        </Typography>
+                      </Paper>
+                    </Box>
+                  ))
+                )
+              ) : activeTab === 2 ? (
                 // QnA Items
                 qnaItems.length === 0 ? (
                   <Box sx={{ 
@@ -722,6 +982,10 @@ export const MainApp = () => {
                     )}
                   </>
                 )
+              ) : (
+                <Box sx={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <Typography variant="h5" color="text.secondary">Yakında...</Typography>
+                </Box>
               )}
             </Box>
 
@@ -737,21 +1001,40 @@ export const MainApp = () => {
                   multiline
                   maxRows={4}
                   fullWidth
-                  placeholder={activeTab === 0 ? "Mesajınızı yazın..." : "Sorunuzu yazın..."}
-                  value={activeTab === 0 ? currentMessage : currentQuestion}
-                  onChange={(e) => activeTab === 0 ? setCurrentMessage(e.target.value) : setCurrentQuestion(e.target.value)}
+                  placeholder={
+                    activeTab === 0 ? "Mesajınızı yazın..." : 
+                    activeTab === 1 ? "ChatGPT'ye mesajınızı yazın..." :
+                    activeTab === 2 ? "Sorunuzu yazın..." :
+                    "Buraya yazın..."
+                  }
+                  value={
+                    activeTab === 0 ? currentMessage : 
+                    activeTab === 1 ? currentOnlineMessage :
+                    activeTab === 2 ? currentQuestion :
+                    ""
+                  }
+                  onChange={(e) => {
+                    if (activeTab === 0) setCurrentMessage(e.target.value);
+                    else if (activeTab === 1) setCurrentOnlineMessage(e.target.value);
+                    else if (activeTab === 2) setCurrentQuestion(e.target.value);
+                  }}
                   onKeyPress={handleKeyPress}
-                  disabled={isLoading || (activeTab === 0 && !activeConversationId)}
+                  disabled={isLoading || (
+                    activeTab === 0 && !activeConversationId ||
+                    activeTab === 1 && !activeOnlineConversationId
+                  )}
                   variant="outlined"
                   size="small"
                   helperText={isLoading ? "API'ye gönderiliyor..." : ""}
                 />
                 <IconButton 
                   color="primary" 
-                  onClick={activeTab === 0 ? sendMessage : sendQuestion}
-                  disabled={isLoading || (activeTab === 0 ? 
-                    (!currentMessage.trim() || !activeConversationId) : 
-                    !currentQuestion.trim()
+                  onClick={activeTab === 0 ? sendMessage : activeTab === 1 ? sendOnlineMessage : sendQuestion}
+                  disabled={isLoading || (
+                    activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
+                    activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
+                    activeTab === 2 ? !currentQuestion.trim() :
+                    true
                   )}
                   sx={{ 
                     backgroundColor: 'primary.main',
@@ -822,13 +1105,24 @@ export const MainApp = () => {
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography variant="body2">
-                  💬 Toplam Sohbet: {conversations.length}
+                  💬 Yerel Sohbet: {conversations.length}
+                </Typography>
+                <Typography variant="body2">
+                  🌐 Çevrimiçi Sohbet: {onlineConversations.length}
                 </Typography>
                 <Typography variant="body2">
                   ❓ Toplam Soru: {qnaItems.length}
                 </Typography>
                 <Typography variant="body2">
-                  🤖 Aktif Model: {availableModels.find(m => m.id === selectedModel)?.name}
+                  🤖 Aktif Model: {
+                    activeTab === 0 ? 
+                      (availableModels.find(m => m.id === selectedModel)?.name || 'Seçilmemiş') : 
+                    activeTab === 1 ? 
+                      (openAIModels.find(m => m.id === selectedOpenAIModel)?.name || 'ChatGPT') : 
+                    activeTab === 2 ? 
+                      'ChatGPT 4.1' : 
+                      'N/A'
+                  }
                 </Typography>
                 <Typography variant="body2" color={isLoading ? 'warning.main' : (isApiHealthy ? 'success.main' : 'error.main')}>
                   {isLoading ? '⚡ API Çalışıyor...' : (isApiHealthy ? '🟢 API Hazır' : '🔴 API Bağlantısı Yok')}
