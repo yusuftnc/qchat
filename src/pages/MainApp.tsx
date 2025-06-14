@@ -568,7 +568,7 @@ export const MainApp = () => {
                     <Typography variant="body2" noWrap>
                       {conv.title}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" align='right' color="text.secondary">
                       {conv.messages.length} mesaj
                     </Typography>
                   </Paper>
@@ -658,7 +658,7 @@ export const MainApp = () => {
                 />
                 <Tab 
                   icon={<Book />} 
-                  label="Döküman Kitaplığı" 
+                  label="Belge Kitaplığı" 
                   iconPosition="start"
                   sx={{ minHeight: 64 }}
                 />
@@ -729,7 +729,7 @@ export const MainApp = () => {
               ) : activeTab === 2 ? (
                 <Box sx={{ minWidth: 200, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="body2" color="text.secondary">
-                    🤖 ChatGPT 4.1 (gpt-4.1)
+                    Sorularınız yüklü belgeleriniz içerisinden cevaplanır.
                   </Typography>
                 </Box>
               ) : null}
@@ -744,7 +744,7 @@ export const MainApp = () => {
                       'Çevrimiçi Chat Modu') :
                   activeTab === 2 ?
                     `${qnaItems.length} soru` :
-                    'Döküman Kitaplığı'
+                    'Belge Kitaplığı'
                 }
                 size="small"
                 color="primary"
