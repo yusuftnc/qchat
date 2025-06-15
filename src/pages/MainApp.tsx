@@ -76,6 +76,12 @@ export const MainApp = () => {
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
+  // Documents state (Tab 4)
+  const [documents, setDocuments] = useState<Array<{id: string, name: string, uploadDate: Date}>>([
+    { id: '1', name: 'Kullanım Kılavuzu.pdf', uploadDate: new Date() },
+    { id: '2', name: 'Teknik Doküman.docx', uploadDate: new Date(Date.now() - 86400000) }
+  ]);
+
   // Dynamic models state
   const [availableModels, setAvailableModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([]);
 
@@ -568,7 +574,7 @@ export const MainApp = () => {
                     <Typography variant="body2" noWrap>
                       {conv.title}
                     </Typography>
-                    <Typography variant="caption" align='right' color="text.secondary">
+                    <Typography variant="caption" color="text.secondary">
                       {conv.messages.length} mesaj
                     </Typography>
                   </Paper>
@@ -744,10 +750,14 @@ export const MainApp = () => {
                       'Çevrimiçi Chat Modu') :
                   activeTab === 2 ?
                     `${qnaItems.length} soru` :
-                    'Belge Kitaplığı'
+                    `${documents.length} Belge`
                 }
                 size="small"
                 color="primary"
+                sx={{
+                  alignSelf: 'flex-start',
+                  marginLeft: 'auto'
+                }}
               />
             </Box>
 
