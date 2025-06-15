@@ -2,14 +2,35 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Box, IconButton, Avatar, Menu, MenuItem, ListItemIcon, ListItemText, 
   Typography, Grid, Button, TextField, Paper, FormControl, Select, 
-  InputLabel, Chip, Divider, Tabs, Tab, CircularProgress
+  InputLabel, Chip, Divider, Tabs, Tab, CircularProgress, Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Tooltip
 } from '@mui/material';
 import { 
   Logout, Add, Send, SmartToy, Psychology, Code, 
-  Science, MenuBook, QuestionAnswer, Chat as ChatIcon, Book, Star
+  Science, MenuBook, QuestionAnswer, Chat as ChatIcon, Book, Star,
+  MoreVert,
+  Delete,
+  Person
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { sendChatMessage, sendQnAQuestion, getAvailableModels, checkApiHealth, sendChatMessageStream, sendQnAQuestionStream, sendOpenAIMessageStream } from '../services/api';
+import { 
+  sendChatMessage, 
+  sendQnAQuestion, 
+  sendChatMessageStream,
+  sendQnAQuestionStream,
+  sendOpenAIMessageStream, 
+  getAvailableModels,
+  checkApiHealth,
+  getFiles,
+  deleteFile,
+  type FileDocument
+} from '../services/api';
 
 // Chat message tipi
 interface ChatMessage {
@@ -77,10 +98,11 @@ export const MainApp = () => {
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   // Documents state (Tab 4)
-  const [documents, setDocuments] = useState<Array<{id: string, name: string, uploadDate: Date}>>([
-    { id: '1', name: 'Kullanım Kılavuzu.pdf', uploadDate: new Date() },
-    { id: '2', name: 'Teknik Doküman.docx', uploadDate: new Date(Date.now() - 86400000) }
-  ]);
+  const [documents, setDocuments] = useState<FileDocument[]>([]);
+  
+  // Menu state for document actions
+  const [documentMenuAnchor, setDocumentMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
 
   // Dynamic models state
   const [availableModels, setAvailableModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([]);
@@ -455,11 +477,59 @@ export const MainApp = () => {
 
     // İlk kontrol
     checkHealth();
+    
+    // İlk defa documents yükle
+    loadDocuments();
 
     // Her 30 saniyede bir kontrol et
     const interval = setInterval(checkHealth, 30000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Dosyaları yükle
+  const loadDocuments = async () => {
+    try {
+      const files = await getFiles();
+      setDocuments(files);
+    } catch (error) {
+      console.error('Dosyalar yüklenemedi:', error);
+    }
+  };
+
+  // Dosya sil
+  const handleDeleteDocument = async (fileId: string) => {
+    try {
+      const success = await deleteFile(fileId);
+      if (success) {
+        await loadDocuments(); // Listeyi yenile
+      }
+    } catch (error) {
+      console.error('Dosya silinemedi:', error);
+    }
+  };
+
+  // Document menu handlers
+  const handleDocumentMenuOpen = (event: React.MouseEvent<HTMLElement>, documentId: string) => {
+    setDocumentMenuAnchor(event.currentTarget);
+    setSelectedDocumentId(documentId);
+  };
+
+  const handleDocumentMenuClose = () => {
+    setDocumentMenuAnchor(null);
+    setSelectedDocumentId(null);
+  };
+
+  const handleDocumentDelete = async () => {
+    if (selectedDocumentId) {
+      await handleDeleteDocument(selectedDocumentId);
+      handleDocumentMenuClose();
+    }
+  };
+
+  // Initial load - API health check ve modeller
+  useEffect(() => {
+    // ... (existing code)
   }, []);
 
   return (
@@ -738,7 +808,14 @@ export const MainApp = () => {
                     Sorularınız yüklü belgeleriniz içerisinden cevaplanır.
                   </Typography>
                 </Box>
-              ) : null}
+              ) : activeTab === 3 ? (
+                <Box sx={{ minWidth: 200, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Soru Cevap kısmında belgeleriniz içerisinden sorgulama yapabilirsiniz.
+                  </Typography>
+                </Box>
+              ) : null 
+              }
               
               <Chip 
                 label={
@@ -993,8 +1070,80 @@ export const MainApp = () => {
                   </>
                 )
               ) : (
-                <Box sx={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Typography variant="h5" color="text.secondary">Yakında...</Typography>
+                // Document Library (Tab 3)
+                <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  {documents.length === 0 ? (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      height: '100%',
+                      textAlign: 'center'
+                    }}>
+                      <Book sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
+                      <Typography variant="h5" color="text.secondary" gutterBottom>
+                        Belge Kitaplığı
+                      </Typography>
+                      <Typography color="text.secondary">
+                        Henüz yüklenmiş belge bulunmuyor
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+                      <TableContainer component={Paper} elevation={1}>
+                        <Table>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>
+                                <Typography variant="subtitle2" fontWeight="bold">
+                                  Dosya Adı
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="subtitle2" fontWeight="bold">
+                                  İşlemler
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {documents.map((document) => (
+                              <TableRow 
+                                key={document.id} 
+                                hover
+                                sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                              >
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Book sx={{ color: 'primary.main', fontSize: 20 }} />
+                                    <Box>
+                                      <Typography variant="body2" fontWeight="medium">
+                                        {document.originalName}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {(document.size / 1024).toFixed(1)} KB • {new Date(document.uploadDate).toLocaleDateString('tr-TR')}
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Tooltip title="Eylemler">
+                                    <IconButton 
+                                      size="small" 
+                                      onClick={(e) => handleDocumentMenuOpen(e, document.id)}
+                                    >
+                                      <MoreVert />
+                                    </IconButton>
+                                  </Tooltip>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
                 </Box>
               )}
             </Box>
@@ -1015,7 +1164,7 @@ export const MainApp = () => {
                     activeTab === 0 ? "Mesajınızı yazın..." : 
                     activeTab === 1 ? "ChatGPT'ye mesajınızı yazın..." :
                     activeTab === 2 ? "Sorunuzu yazın..." :
-                    "Buraya yazın..."
+                    "Belge yükleme özelliği yakında..."
                   }
                   value={
                     activeTab === 0 ? currentMessage : 
@@ -1030,8 +1179,10 @@ export const MainApp = () => {
                   }}
                   onKeyPress={handleKeyPress}
                   disabled={isLoading || (
-                    activeTab === 0 && !activeConversationId ||
-                    activeTab === 1 && !activeOnlineConversationId
+                    activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
+                    activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
+                    activeTab === 2 ? !currentQuestion.trim() :
+                    true // Tab 3 için disable
                   )}
                   variant="outlined"
                   size="small"
@@ -1044,7 +1195,7 @@ export const MainApp = () => {
                     activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
                     activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
                     activeTab === 2 ? !currentQuestion.trim() :
-                    true
+                    true // Tab 3 için disable
                   )}
                   sx={{ 
                     backgroundColor: 'primary.main',
@@ -1145,6 +1296,25 @@ export const MainApp = () => {
           </Box>
         </Grid>
       </Grid>
+
+      {/* Document Menu */}
+      <Menu
+        anchorEl={documentMenuAnchor}
+        open={Boolean(documentMenuAnchor)}
+        onClose={handleDocumentMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={handleDocumentDelete}>
+          <ListItemIcon>
+            <Delete fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText 
+            primary="Sil" 
+            primaryTypographyProps={{ color: 'error.main' }}
+          />
+        </MenuItem>
+      </Menu>
 
       {/* Footer */}
       <Box sx={{ 

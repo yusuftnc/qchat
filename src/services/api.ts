@@ -325,4 +325,42 @@ export async function sendOpenAIMessageStream(
       }
     }
   }
-} 
+}
+
+// ============ FILE MANAGEMENT API ============
+
+// Dosya tipini tanımla
+export interface FileDocument {
+  id: string;
+  originalName: string;
+  filename: string;
+  size: number;
+  uploadDate: string;
+  path: string;
+}
+
+// Tüm dosyaları getir
+export const getFiles = async (): Promise<FileDocument[]> => {
+  try {
+    const response = await apiClient.get('/ollama/v1/files');
+    
+    if (response.data.status && response.data.data && response.data.data.pdfs) {
+      return response.data.data.pdfs;
+    }
+    return [];
+  } catch (error) {
+    console.error('Dosyalar alınamadı:', error);
+    throw error;
+  }
+};
+
+// Dosya sil
+export const deleteFile = async (fileId: string): Promise<boolean> => {
+  try {
+    const response = await apiClient.delete(`/ollama/v1/files/${fileId}`);
+    return response.data.status === true;
+  } catch (error) {
+    console.error('Dosya silinemedi:', error);
+    throw error;
+  }
+}; 
