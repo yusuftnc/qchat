@@ -31,6 +31,7 @@ import {
   deleteFile,
   type FileDocument
 } from '../services/api';
+import reactLogo from '../assets/react.svg';
 
 // Chat message tipi
 interface ChatMessage {
@@ -471,7 +472,9 @@ export const MainApp = () => {
   // API health check
   useEffect(() => {
     const checkHealth = async () => {
+      console.log('🔍 Starting API health check...');
       const isHealthy = await checkApiHealth();
+      console.log('🔍 Health check result:', isHealthy);
       setIsApiHealthy(isHealthy);
     };
 
@@ -560,7 +563,7 @@ export const MainApp = () => {
               backgroundColor: 'primary.main',
               color: 'white'
             }}>
-              <img src="/qchat-logo.svg" alt="QChat" width="32" height="32" style={{ filter: 'brightness(0) invert(1)' }} />
+              <img src={reactLogo} alt="QChat" width="32" height="32" style={{ filter: 'brightness(0) invert(1)' }} />
               <Typography variant="h6" fontWeight="bold">
                 QChat
               </Typography>
@@ -1178,12 +1181,7 @@ export const MainApp = () => {
                     else if (activeTab === 2) setCurrentQuestion(e.target.value);
                   }}
                   onKeyPress={handleKeyPress}
-                  disabled={isLoading || (
-                    activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
-                    activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
-                    activeTab === 2 ? !currentQuestion.trim() :
-                    true // Tab 3 için disable
-                  )}
+                  disabled={activeTab === 3 || isLoading}
                   variant="outlined"
                   size="small"
                   helperText={isLoading ? "API'ye gönderiliyor..." : ""}
@@ -1191,11 +1189,11 @@ export const MainApp = () => {
                 <IconButton 
                   color="primary" 
                   onClick={activeTab === 0 ? sendMessage : activeTab === 1 ? sendOnlineMessage : sendQuestion}
-                  disabled={isLoading || (
+                  disabled={activeTab === 3 || isLoading || (
                     activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
                     activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
                     activeTab === 2 ? !currentQuestion.trim() :
-                    true // Tab 3 için disable
+                    false
                   )}
                   sx={{ 
                     backgroundColor: 'primary.main',

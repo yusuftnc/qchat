@@ -155,10 +155,24 @@ export const getAvailableModels = async () => {
 // API health check
 export const checkApiHealth = async () => {
   try {
-    const response = await apiClient.get('/ollama/v1/health');
-    return response.data.status === true;
-  } catch (error) {
-    console.error('API health check failed:', error);
+    const response = await apiClient.get('/ollama/v1/health', {
+      timeout: 5000  // 5 saniye timeout
+    });
+    
+    console.log('🔍 Health check response:', response.data);
+    
+    // Backend response kontrolü
+    const isHealthy = response.data && response.data.status === true;
+    console.log('🔍 API Health Status:', isHealthy);
+    
+    return isHealthy;
+  } catch (error: any) {
+    console.error('❌ API health check failed:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      code: error.code
+    });
     return false;
   }
 };
