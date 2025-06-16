@@ -16,12 +16,10 @@ import {
   Science, MenuBook, QuestionAnswer, Chat as ChatIcon, Book, Star,
   MoreVert,
   Delete,
-  Person
+  CloudUpload
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  sendChatMessage, 
-  sendQnAQuestion, 
+import {
   sendChatMessageStream,
   sendQnAQuestionStream,
   sendOpenAIMessageStream, 
@@ -100,6 +98,7 @@ export const MainApp = () => {
 
   // Documents state (Tab 4)
   const [documents, setDocuments] = useState<FileDocument[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   // Menu state for document actions
   const [documentMenuAnchor, setDocumentMenuAnchor] = useState<null | HTMLElement>(null);
@@ -111,8 +110,8 @@ export const MainApp = () => {
   // OpenAI models state (Tab 2)
   const [selectedOpenAIModel, setSelectedOpenAIModel] = useState('gpt-4.1-nano');
   const [openAIModels] = useState<Array<{id: string, name: string, icon: React.ReactNode}>>([
-    { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano (Eko)', icon: <SmartToy /> },
-    { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini (Hızlı)', icon: <Psychology /> }
+    { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', icon: <SmartToy /> },
+    { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', icon: <Psychology /> }
   ]);
 
   // Model icon mapping helper
@@ -530,6 +529,33 @@ export const MainApp = () => {
     }
   };
 
+  // Dosya seçme handler
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  // Dosya yükleme handler
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+    
+    // TODO: API'ye dosya yükleme işlemi buraya gelecek
+    console.log('📄 Dosya yüklenecek:', selectedFile.name);
+    
+    // Şimdilik mock başarı mesajı
+    alert(`✅ "${selectedFile.name}" dosyası başarıyla yüklendi! (Mock)`);
+    
+    // File input'u temizle
+    setSelectedFile(null);
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+    
+    // Dosya listesini yenile
+    await loadDocuments();
+  };
+
   // Initial load - API health check ve modeller
   useEffect(() => {
     // ... (existing code)
@@ -852,7 +878,7 @@ export const MainApp = () => {
                 flexDirection: 'column',
                 gap: 2,
                 minHeight: 0,  // Flex child için kritik!
-                maxHeight: 'calc(100vh - 240px)', // Daha hassas calculation
+                // maxHeight kaldırıldı - flex ile doğal height
                 // Custom Scrollbar Styling
                 '&::-webkit-scrollbar': {
                   width: '8px',
@@ -1073,81 +1099,77 @@ export const MainApp = () => {
                   </>
                 )
               ) : (
-                // Document Library (Tab 3)
-                <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  {documents.length === 0 ? (
-                    <Box sx={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      height: '100%',
-                      textAlign: 'center'
-                    }}>
-                      <Book sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
-                      <Typography variant="h5" color="text.secondary" gutterBottom>
-                        Belge Kitaplığı
-                      </Typography>
-                      <Typography color="text.secondary">
-                        Henüz yüklenmiş belge bulunmuyor
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-                      <TableContainer component={Paper} elevation={1}>
-                        <Table>
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>
-                                <Typography variant="subtitle2" fontWeight="bold">
-                                  Dosya Adı
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right">
-                                <Typography variant="subtitle2" fontWeight="bold">
-                                  İşlemler
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {documents.map((document) => (
-                              <TableRow 
-                                key={document.id} 
-                                hover
-                                sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                              >
-                                <TableCell>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Book sx={{ color: 'primary.main', fontSize: 20 }} />
-                                    <Box>
-                                      <Typography variant="body2" fontWeight="medium">
-                                        {document.originalName}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary">
-                                        {(document.size / 1024).toFixed(1)} KB • {new Date(document.uploadDate).toLocaleDateString('tr-TR')}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                </TableCell>
-                                <TableCell align="right">
-                                  <Tooltip title="Eylemler">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={(e) => handleDocumentMenuOpen(e, document.id)}
-                                    >
-                                      <MoreVert />
-                                    </IconButton>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </Box>
-                  )}
-                </Box>
+                // Document Library (Tab 3) - FIX: Diğer tablarla aynı yapı
+                documents.length === 0 ? (
+                  <Box sx={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    height: '100%',
+                    textAlign: 'center'
+                  }}>
+                    <Book sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
+                    <Typography variant="h5" color="text.secondary" gutterBottom>
+                      Belge Kitaplığı
+                    </Typography>
+                    <Typography color="text.secondary">
+                      Henüz yüklenmiş belge bulunmuyor
+                    </Typography>
+                  </Box>
+                ) : (
+                  <TableContainer component={Paper} elevation={1}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>
+                            <Typography variant="subtitle2" fontWeight="bold">
+                              Dosya Adı
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="subtitle2" fontWeight="bold">
+                              İşlemler
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {documents.map((document) => (
+                          <TableRow 
+                            key={document.id} 
+                            hover
+                            sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                          >
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Book sx={{ color: 'primary.main', fontSize: 20 }} />
+                                <Box>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {document.originalName}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {(document.size / 1024).toFixed(1)} KB • {new Date(document.uploadDate).toLocaleDateString('tr-TR')}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Tooltip title="Eylemler">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={(e) => handleDocumentMenuOpen(e, document.id)}
+                                >
+                                  <MoreVert />
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )
               )}
             </Box>
 
@@ -1158,53 +1180,107 @@ export const MainApp = () => {
               borderColor: 'divider',
               backgroundColor: 'background.paper'
             }}>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-                <TextField
-                  multiline
-                  maxRows={4}
-                  fullWidth
-                  placeholder={
-                    activeTab === 0 ? "Mesajınızı yazın..." : 
-                    activeTab === 1 ? "ChatGPT'ye mesajınızı yazın..." :
-                    activeTab === 2 ? "Sorunuzu yazın..." :
-                    "Belge yükleme özelliği yakında..."
-                  }
-                  value={
-                    activeTab === 0 ? currentMessage : 
-                    activeTab === 1 ? currentOnlineMessage :
-                    activeTab === 2 ? currentQuestion :
-                    ""
-                  }
-                  onChange={(e) => {
-                    if (activeTab === 0) setCurrentMessage(e.target.value);
-                    else if (activeTab === 1) setCurrentOnlineMessage(e.target.value);
-                    else if (activeTab === 2) setCurrentQuestion(e.target.value);
-                  }}
-                  onKeyPress={handleKeyPress}
-                  disabled={activeTab === 3 || isLoading}
-                  variant="outlined"
-                  size="small"
-                  helperText={isLoading ? "API'ye gönderiliyor..." : ""}
-                />
-                <IconButton 
-                  color="primary" 
-                  onClick={activeTab === 0 ? sendMessage : activeTab === 1 ? sendOnlineMessage : sendQuestion}
-                  disabled={activeTab === 3 || isLoading || (
-                    activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
-                    activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
-                    activeTab === 2 ? !currentQuestion.trim() :
-                    false
-                  )}
-                  sx={{ 
-                    backgroundColor: 'primary.main',
-                    color: 'white',
-                    '&:hover': { backgroundColor: 'primary.dark' },
-                    '&:disabled': { backgroundColor: 'grey.300' }
-                  }}
-                >
-                  {isLoading ? <CircularProgress size={20} color="inherit" /> : <Send />}
-                </IconButton>
-              </Box>
+              {activeTab === 3 ? (
+                // Belge Kitaplığı için dosya yükleme alanı
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  {/* Hidden file input */}
+                  <input
+                    id="file-input"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.md"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
+                  />
+                  
+                  {/* File selection area */}
+                  <Box 
+                    component="label" 
+                    htmlFor="file-input"
+                    sx={{ 
+                      flexGrow: 1,
+                      p: 2,
+                      border: 2,
+                      borderStyle: 'dashed',
+                      borderColor: selectedFile ? 'primary.main' : 'grey.300',
+                      borderRadius: 1,
+                      backgroundColor: selectedFile ? 'primary.light' : 'grey.50',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        backgroundColor: 'primary.light'
+                      }
+                    }}
+                  >
+                    <CloudUpload sx={{ color: selectedFile ? 'primary.main' : 'grey.500' }} />
+                    <Typography variant="body2" color={selectedFile ? 'primary.main' : 'text.secondary'}>
+                      {selectedFile ? `📄 ${selectedFile.name}` : '📁 Dosya seçmek için tıklayın (PDF, DOC, TXT)'}
+                    </Typography>
+                  </Box>
+                  
+                  {/* Upload button */}
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleFileUpload}
+                    disabled={!selectedFile || isLoading}
+                    startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : <Add />}
+                    sx={{ minWidth: 100 }}
+                  >
+                    {isLoading ? 'Yükleniyor...' : 'Ekle'}
+                  </Button>
+                </Box>
+              ) : (
+                // Diğer tablar için normal mesaj alanı
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                  <TextField
+                    multiline
+                    maxRows={4}
+                    fullWidth
+                    placeholder={
+                      activeTab === 0 ? "Mesajınızı yazın..." : 
+                      activeTab === 1 ? "ChatGPT'ye mesajınızı yazın..." :
+                      "Sorunuzu yazın..."
+                    }
+                    value={
+                      activeTab === 0 ? currentMessage : 
+                      activeTab === 1 ? currentOnlineMessage :
+                      currentQuestion
+                    }
+                    onChange={(e) => {
+                      if (activeTab === 0) setCurrentMessage(e.target.value);
+                      else if (activeTab === 1) setCurrentOnlineMessage(e.target.value);
+                      else if (activeTab === 2) setCurrentQuestion(e.target.value);
+                    }}
+                    onKeyPress={handleKeyPress}
+                    disabled={isLoading}
+                    variant="outlined"
+                    size="small"
+                    helperText={isLoading ? "API'ye gönderiliyor..." : ""}
+                  />
+                  <IconButton 
+                    color="primary" 
+                    onClick={activeTab === 0 ? sendMessage : activeTab === 1 ? sendOnlineMessage : sendQuestion}
+                    disabled={isLoading || (
+                      activeTab === 0 ? (!currentMessage.trim() || !activeConversationId) : 
+                      activeTab === 1 ? (!currentOnlineMessage.trim() || !activeOnlineConversationId) : 
+                      activeTab === 2 ? !currentQuestion.trim() :
+                      false
+                    )}
+                    sx={{ 
+                      backgroundColor: 'primary.main',
+                      color: 'white',
+                      '&:hover': { backgroundColor: 'primary.dark' },
+                      '&:disabled': { backgroundColor: 'grey.300' }
+                    }}
+                  >
+                    {isLoading ? <CircularProgress size={20} color="inherit" /> : <Send />}
+                  </IconButton>
+                </Box>
+              )}
             </Box>
           </Box>
         </Grid>
@@ -1280,7 +1356,7 @@ export const MainApp = () => {
                       (openAIModels.find(m => m.id === selectedOpenAIModel)?.name || 'ChatGPT') : 
                     activeTab === 2 ? 
                       'ChatGPT 4.1' : 
-                      'N/A'
+                      ''
                   }
                 </Typography>
                 <Typography variant="body2" color={isLoading ? 'warning.main' : (isApiHealthy ? 'success.main' : 'error.main')}>

@@ -74,7 +74,7 @@ export const getModels = async () => {
 // QnA sorusu gönder - GERÇEK FORMAT
 export const sendQnAQuestion = async (prompt: string, model: string) => {
   try {
-    const response = await apiClient.post('/ollama/v1/qna', {
+    const response = await apiClient.post('/qchat-api/v1/ollama/qna', {
       model: model,
       stream: true,
       prompt: prompt
@@ -114,7 +114,7 @@ export const sendQnAQuestion = async (prompt: string, model: string) => {
 // Chat mesajı gönder - GERÇEK FORMAT
 export const sendChatMessage = async (messages: any[], model: string) => {
   try {
-    const response = await apiClient.post('/ollama/v1/chat', {
+    const response = await apiClient.post('/qchat-api/v1/ollama/chat', {
       model: model,
       stream: true,
       messages: messages  // MainApp'ten gelen messages'ı direkt kullan
@@ -148,14 +148,14 @@ export const removeAuthToken = () => {
 
 // Mevcut modelleri getir
 export const getAvailableModels = async () => {
-  const response = await apiClient.get('/ollama/v1/models');
+  const response = await apiClient.get('/qchat-api/v1/ollama/models');
   return response.data;
 };
 
 // API health check
 export const checkApiHealth = async () => {
   try {
-    const response = await apiClient.get('/ollama/v1/health', {
+    const response = await apiClient.get('/qchat-api/v1/health', {
       timeout: 5000  // 5 saniye timeout
     });
     
@@ -183,7 +183,7 @@ export async function sendChatMessageStream(
   model: string,
   onChunk: (data: any) => void
 ) {
-  const response = await fetch(`${API_BASE_URL}/ollama/v1/chat`, {
+  const response = await fetch(`${API_BASE_URL}/qchat-api/v1/ollama/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -235,7 +235,7 @@ export async function sendQnAQuestionStream(
   model: string,
   onChunk: (data: any) => void
 ) {
-  const response = await fetch(`${API_BASE_URL}/ollama/v1/qna`, {
+  const response = await fetch(`${API_BASE_URL}/qchat-api/v1/ollama/qna`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -356,7 +356,7 @@ export interface FileDocument {
 // Tüm dosyaları getir
 export const getFiles = async (): Promise<FileDocument[]> => {
   try {
-    const response = await apiClient.get('/ollama/v1/files');
+    const response = await apiClient.get('/qchat-api/v1/files');
     
     if (response.data.status && response.data.data && response.data.data.pdfs) {
       return response.data.data.pdfs;
@@ -371,7 +371,7 @@ export const getFiles = async (): Promise<FileDocument[]> => {
 // Dosya sil
 export const deleteFile = async (fileId: string): Promise<boolean> => {
   try {
-    const response = await apiClient.delete(`/ollama/v1/files/${fileId}`);
+    const response = await apiClient.delete(`/qchat-api/v1/files/${fileId}`);
     return response.data.status === true;
   } catch (error) {
     console.error('Dosya silinemedi:', error);
