@@ -22,7 +22,8 @@ import { useAuth } from '../hooks/useAuth';
 import {
   sendChatMessageStream,
   sendQnAQuestionStream,
-  sendOpenAIMessageStream, 
+  sendOpenAIMessageStream,
+  sendOpenAIMessage, 
   getAvailableModels,
   checkApiHealth,
   getFiles,
@@ -70,11 +71,8 @@ export const MainApp = () => {
   const [modelsLoading, setModelsLoading] = useState(true);
   const [isApiHealthy, setIsApiHealthy] = useState(false);
   
-  // Chat container ref for auto-scroll
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  
-  // QnA container ref for auto-scroll
-  const qnaContainerRef = useRef<HTMLDivElement>(null);
+  // Content container ref for auto-scroll
+  const contentContainerRef = useRef<HTMLDivElement>(null);
   
   // StrictMode duplicate prevention
   const initialConversationCreated = useRef(false);
@@ -223,21 +221,13 @@ export const MainApp = () => {
     }
   }, []); // Sadece component mount'ta çalışır
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll for all tabs
   useEffect(() => {
-    if (chatContainerRef.current && activeTab === 0 && activeConversationId) {
-      const container = chatContainerRef.current;
+    if (contentContainerRef.current) {
+      const container = contentContainerRef.current;
       container.scrollTop = container.scrollHeight;
     }
-  }, [conversations, activeConversationId, activeTab]); // Messages değiştiğinde scroll
-
-  // Auto-scroll to bottom when QnA items change
-  useEffect(() => {
-    if (qnaContainerRef.current && activeTab === 1) {
-      const container = qnaContainerRef.current;
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [qnaItems, activeTab]); // QnA items değiştiğinde scroll
+  }, [conversations, onlineConversations, qnaItems, documents, activeTab, activeConversationId, activeOnlineConversationId, pendingQuestion]);
 
   // Chat mesaj gönder - GERÇEK API ENTEGRASYONU
   const sendMessage = async () => {
@@ -359,24 +349,53 @@ export const MainApp = () => {
       // Yeni mesajı history'ye ekle
       const allMessages = [...chatHistory, { role: 'user' as const, content: currentMsgToSend }];
 
-      await sendOpenAIMessageStream(
-        allMessages,
-        selectedOpenAIModel,
-        (chunk) => {
-          setOnlineConversations(prev => prev.map(conv =>
-            conv.id === activeOnlineConversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.map(msg =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: (msg.content || '') + (chunk.content || '') }
-                      : msg
-                  )
-                }
-              : conv
-          ));
-        }
-      );
+      console.log('🚀 Trying stream first...');
+      try {
+        await sendOpenAIMessageStream(
+          allMessages,
+          selectedOpenAIModel,
+          (chunk) => {
+            console.log('🎯 Received chunk in MainApp:', chunk);
+            
+            const contentToAdd = chunk.content || chunk.response || chunk.message?.content || chunk.choices?.[0]?.delta?.content || '';
+            console.log('📝 Content to add:', contentToAdd);
+            
+            if (contentToAdd) {
+              setOnlineConversations(prev => prev.map(conv =>
+                conv.id === activeOnlineConversationId
+                  ? {
+                      ...conv,
+                      messages: conv.messages.map(msg =>
+                        msg.id === aiMessageId
+                          ? { ...msg, content: (msg.content || '') + contentToAdd }
+                          : msg
+                      )
+                    }
+                  : conv
+              ));
+            } else {
+              console.warn('⚠️ No content found in chunk:', chunk);
+            }
+          }
+        );
+      } catch (streamError) {
+        console.error('❌ Stream failed, trying non-stream:', streamError);
+        
+        // Stream başarısız olursa non-stream dene
+        const response = await sendOpenAIMessage(allMessages, selectedOpenAIModel);
+        setOnlineConversations(prev => prev.map(conv =>
+          conv.id === activeOnlineConversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map(msg =>
+                  msg.id === aiMessageId
+                    ? { ...msg, content: response.message }
+                    : msg
+                )
+              }
+            : conv
+        ));
+      }
     } catch (error) {
       setOnlineConversations(prev => prev.map(conv =>
         conv.id === activeOnlineConversationId
@@ -869,7 +888,7 @@ export const MainApp = () => {
 
             {/* Content Area */}
             <Box 
-              ref={activeTab === 0 ? chatContainerRef : qnaContainerRef}
+              ref={contentContainerRef}
               sx={{ 
                 flexGrow: 1,
                 overflow: 'auto',

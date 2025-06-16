@@ -281,65 +281,124 @@ export async function sendQnAQuestionStream(
   }
 }
 
-// OpenAI API entegrasyonu
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || 'your-api-key-here';
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
-// Stream uyumlu OpenAI mesajı gönderme
+// OpenAI API entegrasyonu (Kendi Backend üzerinden)
+// Stream uyumlu OpenAI mesajı gönderme - Backend proxy kullanıyor
 export async function sendOpenAIMessageStream(
   messages: any[],
   model: string,
   onChunk: (data: any) => void
 ) {
-  const response = await fetch(OPENAI_API_URL, {
+  console.log('🚀 OpenAI Stream Request:', {
+    url: `${API_BASE_URL}/qchat-api/v1/openai/chat`,
+    model,
+    messages,
+    messageCount: messages.length
+  });
+
+  const response = await fetch(`${API_BASE_URL}/qchat-api/v1/openai/chat`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
+      'X-API-KEY': API_KEY,
     },
     body: JSON.stringify({
       model,
-      stream: true,
       messages,
     }),
   });
+
+  console.log('🔍 OpenAI Response Status:', response.status, response.statusText);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ OpenAI API Error Response:', errorText);
+    throw new Error(`API Error: ${response.status} - ${errorText}`);
+  }
 
   if (!response.body) throw new Error('No response body');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let chunkCount = 0;
+
+  console.log('📡 Starting to read OpenAI stream...');
 
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) {
+      console.log('✅ OpenAI Stream completed, total chunks:', chunkCount);
+      break;
+    }
+    
     buffer += decoder.decode(value, { stream: true });
+    console.log('📦 Raw chunk received:', buffer.slice(-100)); // Son 100 karakter
 
     let lines = buffer.split('\n');
     buffer = lines.pop()!;
 
     for (const line of lines) {
       if (line.trim()) {
-        // OpenAI stream format: "data: {json}" veya "data: [DONE]"
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6); // "data: " kısmını çıkar
-          if (data === '[DONE]') {
-            return; // Stream tamamlandı
-          }
-          try {
-            const json = JSON.parse(data);
-            // OpenAI response formatı: choices[0].delta.content
-            if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
-              onChunk({ content: json.choices[0].delta.content });
-            }
-          } catch (e) {
-            // parse hatası olursa atla
-          }
+        chunkCount++;
+        console.log(`🔍 Processing line ${chunkCount}:`, line);
+        try {
+          const json = JSON.parse(line);
+          console.log('✅ Parsed JSON:', json);
+          onChunk(json);
+        } catch (e) {
+          console.warn('⚠️ JSON parse failed for line:', line, 'Error:', e);
         }
       }
     }
   }
+  
+  if (buffer.trim()) {
+    console.log('🔍 Final buffer:', buffer);
+    try {
+      const json = JSON.parse(buffer);
+      console.log('✅ Final JSON:', json);
+      onChunk(json);
+    } catch (e) {
+      console.warn('⚠️ Final buffer parse failed:', buffer, 'Error:', e);
+    }
+  }
 }
+
+// Non-stream OpenAI chat mesajı (fallback için)
+export const sendOpenAIMessage = async (messages: any[], model: string) => {
+  try {
+    const response = await apiClient.post('/qchat-api/v1/openai/chat', {
+      model: model,
+      messages: messages
+    });
+
+    console.log('🟢 OpenAI Response:', {
+      status: response.data.status,
+      data: response.data.data,
+      fullResponse: response.data
+    });
+
+    // Backend response format kontrolü
+    if (response.data.status && response.data.data) {
+      return {
+        message: response.data.data.content || response.data.data.message,
+        model: response.data.data.model || model,
+        timestamp: response.data.data.created_at || new Date().toISOString()
+      };
+    } else {
+      console.error('❌ OpenAI Invalid response format:', response.data);
+      throw new Error('Invalid response format');
+    }
+  } catch (error: any) {
+    console.error('❌ OpenAI Error Details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      config: error.config
+    });
+    throw error;
+  }
+};
 
 // ============ FILE MANAGEMENT API ============
 
